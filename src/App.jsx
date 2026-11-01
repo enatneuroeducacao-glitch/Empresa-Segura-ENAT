@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { PortalContent } from './PortalContent';
 import {
   ArrowRight, ShieldCheck, Brain, Users, ClipboardCheck, Building2,
   Menu, X, ChevronRight, CheckCircle2, LockKeyhole, HardHat, CarFront,
@@ -21,12 +22,17 @@ const steps = [
 export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [accessType, setAccessType] = useState(null);
+  const [portalType, setPortalType] = useState(null);
+  const openPortal = (type) => { setAccessType(null); setPortalType(type); window.location.hash = `portal-${type}`; };
+  const closePortal = () => { setPortalType(null); window.location.hash = 'inicio'; };
 
   const closeMenu = () => setMenuOpen(false);
   const goTo = (id) => {
     closeMenu();
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
   };
+
+  if (portalType) return <PortalContent pageType={portalType} onBack={closePortal} />;
 
   return (
     <div className="app-shell">
@@ -155,7 +161,11 @@ export default function App() {
             <h2 id="access-title">Acesso à Empresa Segura</h2>
             <p className="modal-description">A área autenticada será ativada após a configuração do sistema de usuários e das permissões de acesso.</p>
             <div className="access-status"><span className="status-dot" /><div><strong>Portal em implantação</strong><small>O acesso ainda não está disponível nesta versão.</small></div></div>
-            <button className="button-primary modal-button" onClick={() => setAccessType(null)}>Voltar ao portal <ArrowRight size={18} /></button>
+            <div className="portal-choice-actions">
+              <button className="button-primary modal-button" onClick={() => openPortal('empresa')}><Building2 size={17}/> Portal de referência da empresa <ArrowRight size={18} /></button>
+              <button className="button-ghost modal-button" onClick={() => openPortal('funcionario')}><Users size={17}/> Portal de referência do funcionário <ArrowRight size={18} /></button>
+            </div>
+            <button className="button-ghost modal-button" onClick={() => setAccessType(null)}>Voltar ao portal público</button>
             <p className="modal-footnote"><ShieldCheck size={14} /> A autenticação será configurada antes de liberar dados empresariais.</p>
           </section>
         </div>
