@@ -157,16 +157,15 @@ export default function App() {
           <section className="access-modal" role="dialog" aria-modal="true" aria-labelledby="access-title">
             <button className="modal-close" onClick={() => setAccessType(null)} aria-label="Fechar"><X size={20} /></button>
             <div className="modal-brand-mark"><LockKeyhole size={25} /></div>
-            <span className="section-label">ÁREA RESTRITA</span>
+            <span className="section-label">ACESSO INSTITUCIONAL</span>
             <h2 id="access-title">Acesso à Empresa Segura</h2>
-            <p className="modal-description">A área autenticada será ativada após a configuração do sistema de usuários e das permissões de acesso.</p>
-            <div className="access-status"><span className="status-dot" /><div><strong>Portal em implantação</strong><small>O acesso ainda não está disponível nesta versão.</small></div></div>
+            <p className="modal-description">O acesso funciona por contas individuais. A empresa solicita sua habilitação e cadastra seus funcionários; cada funcionário só poderá entrar depois de ser cadastrado e autorizado pela empresa.</p>
+            <div className="access-status"><span className="status-dot" /><div><strong>Controle de acesso por perfil</strong><small>Os conteúdos institucionais são gerenciados exclusivamente pela administração ENAT.</small></div></div>
             <div className="portal-choice-actions">
-              <button className="button-primary modal-button" onClick={() => openPortal('empresa')}><Building2 size={17}/> Portal de referência da empresa <ArrowRight size={18} /></button>
-              <button className="button-ghost modal-button" onClick={() => openPortal('funcionario')}><Users size={17}/> Portal de referência do funcionário <ArrowRight size={18} /></button>
+              <button className="button-primary modal-button" onClick={() => openPortal('empresa')}><Building2 size={17}/> Acesso da empresa / solicitar cadastro <ArrowRight size={18} /></button>
+              <button className="button-ghost modal-button" onClick={() => openPortal('funcionario')}><Users size={17}/> Acesso do funcionário <ArrowRight size={18} /></button>
             </div>
-            <button className="button-ghost modal-button" onClick={() => setAccessType(null)}>Voltar ao portal público</button>
-            <p className="modal-footnote"><ShieldCheck size={14} /> A autenticação será configurada antes de liberar dados empresariais.</p>
+            <p className="modal-footnote"><ShieldCheck size={14} /> Não existem contas ou senhas demonstrativas. O login real será habilitado com autenticação segura, aprovação da empresa e permissões administradas pela ENAT.</p>
           </section>
         </div>
       )}
