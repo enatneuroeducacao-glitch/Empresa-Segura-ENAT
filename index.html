@@ -6,9 +6,32 @@
     <meta name="theme-color" content="#102d27" />
     <meta name="description" content="Empresa Segura ENAT — educação, prevenção e cultura de segurança no trabalho e no trânsito." />
     <title>Empresa Segura ENAT</title>
+    <style>
+      body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#18352e;background:#f5f8f5}
+      .fallback{min-height:100vh}.fallback header{padding:22px max(6vw,22px);background:#fff;border-bottom:1px solid #e5ece7;display:flex;align-items:center;gap:12px}
+      .fallback .mark{background:#174c3d;color:white;border-radius:10px;width:42px;height:42px;display:grid;place-items:center;font-size:23px}
+      .fallback header strong{letter-spacing:.08em;font-size:13px}.fallback header small{display:block;color:#62736d;margin-top:5px}
+      .fallback main{max-width:1080px;margin:auto;padding:70px 24px}.fallback .hero{background:#102d27;color:white;border-radius:18px;padding:clamp(30px,6vw,72px);box-sizing:border-box}
+      .fallback .label{font-size:11px;letter-spacing:.16em;color:#9de3ce;font-weight:bold}.fallback h1{font-size:clamp(34px,5vw,60px);line-height:1.08;max-width:760px;margin:22px 0}
+      .fallback p{line-height:1.8;max-width:700px;color:#d8e8e1}.fallback .actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:30px}
+      .fallback a{display:inline-block;text-decoration:none;border-radius:7px;padding:14px 18px;font-weight:bold;font-size:13px}
+      .fallback .primary{background:#9de3ce;color:#102d27}.fallback .secondary{border:1px solid #6a9182;color:white}
+      .fallback .notice{color:#62736d;font-size:12px;margin:24px 0 0}.fallback footer{padding:25px;text-align:center;color:#62736d;font-size:12px}
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="fallback">
+        <header><span class="mark">✓</span><div><strong>EMPRESA SEGURA</strong><small>ENAT · Neuroeducação aplicada</small></div></header>
+        <main><section class="hero">
+          <div class="label">SEGURANÇA É UMA CULTURA</div>
+          <h1>Empresas mais seguras começam com pessoas mais conscientes.</h1>
+          <p>Educação, comportamento humano e prevenção unidos para desenvolver uma cultura de segurança no trabalho, na mobilidade e na vida.</p>
+          <div class="actions"><a class="primary" href="#programa">Conheça o programa</a><a class="secondary" href="mailto:contato@enat.org.br?subject=Empresa%20Segura%20ENAT">Solicitar informações</a></div>
+        </section><p class="notice">Você está visualizando a versão de contingência do portal. Alguns recursos interativos podem estar temporariamente indisponíveis.</p></main>
+        <footer>Empresa Segura ENAT · Educação e prevenção para uma cultura de segurança.</footer>
+      </div>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
