@@ -2,14 +2,14 @@ import { useState } from 'react';
 import {
   ArrowRight, ShieldCheck, Brain, Users, ClipboardCheck, Building2,
   Menu, X, ChevronRight, CheckCircle2, LockKeyhole, HardHat, CarFront,
-  ChartNoAxesCombined, HeartHandshake
+  BarChart3, HeartHandshake
 } from 'lucide-react';
 
 const pillars = [
   { icon: Brain, title: 'Comportamento humano', text: 'Desenvolvimento da percepção de risco, atenção, tomada de decisão e responsabilidade.' },
   { icon: ShieldCheck, title: 'Prevenção integrada', text: 'Ações educativas para fortalecer práticas seguras dentro e fora do ambiente de trabalho.' },
   { icon: Users, title: 'Cultura de segurança', text: 'Envolvimento de lideranças e equipes para transformar prevenção em rotina.' },
-  { icon: ChartNoAxesCombined, title: 'Acompanhamento', text: 'Organização de ações, indicadores e evolução das iniciativas de segurança.' }
+  { icon: BarChart3, title: 'Acompanhamento', text: 'Organização de ações, indicadores e evolução das iniciativas de segurança.' }
 ];
 
 const steps = [
