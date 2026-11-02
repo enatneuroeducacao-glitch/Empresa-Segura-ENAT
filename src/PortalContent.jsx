@@ -1,3 +1,4 @@
+import React from "react";
 import { useEffect, useState } from "react";
 import { ArrowLeft, Building2, UserRound, ShieldCheck, LockKeyhole, LogIn, UserPlus, LogOut, Clock3, CheckCircle2, AlertCircle } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
