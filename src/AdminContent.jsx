@@ -1,3 +1,4 @@
+import React from "react";
 import { useEffect, useState } from "react";
 import { ArrowLeft, ShieldCheck, LockKeyhole, Building2, Users, FileText, BookOpenCheck, Settings, Activity, KeyRound, CircleHelp, LogOut, RefreshCw, CheckCircle2, XCircle, Clock3, Save, Eye, AlertTriangle } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
