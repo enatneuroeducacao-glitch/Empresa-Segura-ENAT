@@ -22,7 +22,7 @@ const steps = [
 export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [accessType, setAccessType] = useState(null);
-  const [portalType, setPortalType] = useState(null);
+  const [portalType, setPortalType] = useState(() => {\n    const initial = window.location.hash.replace("#portal-", "");\n    return ["empresa", "funcionario"].includes(initial) ? initial : null;\n  });
   const openPortal = (type) => { setAccessType(null); setPortalType(type); window.location.hash = `portal-${type}`; };
   const closePortal = () => { setPortalType(null); window.location.hash = 'inicio'; };
 
