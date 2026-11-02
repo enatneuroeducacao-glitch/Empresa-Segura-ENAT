@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { PortalContent } from './PortalContent';
+import { AdminContent } from './AdminContent';
 import {
   ArrowRight, ShieldCheck, Brain, Users, ClipboardCheck, Building2,
   Menu, X, ChevronRight, CheckCircle2, LockKeyhole, HardHat, CarFront,
@@ -24,7 +25,7 @@ export default function App() {
   const [accessType, setAccessType] = useState(null);
   const [portalType, setPortalType] = useState(() => {
     const initial = window.location.hash.replace("#portal-", "");
-    return ["empresa", "funcionario"].includes(initial) ? initial : null;
+    return ["empresa", "funcionario", "admin"].includes(initial) ? initial : null;
   });
   const openPortal = (type) => { setAccessType(null); setPortalType(type); window.location.hash = `portal-${type}`; };
   const closePortal = () => { setPortalType(null); window.location.hash = 'inicio'; };
@@ -35,6 +36,7 @@ export default function App() {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  if (portalType === 'admin') return <AdminContent onBack={closePortal} />;
   if (portalType) return <PortalContent pageType={portalType} onBack={closePortal} />;
 
   return (
@@ -153,6 +155,7 @@ export default function App() {
         </a>
         <p>Educação e prevenção para uma cultura de segurança.</p>
         <span className="footer-copyright">© {new Date().getFullYear()} ENAT · Todos os direitos reservados</span>
+        <a className="footer-admin-link" href="#portal-admin" onClick={() => openPortal("admin")}>Central administrativa</a>
       </footer>
 
       {accessType && (
