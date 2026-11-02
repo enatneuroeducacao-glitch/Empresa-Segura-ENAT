@@ -47,11 +47,11 @@ export function PortalContent({ pageType, onBack }) {
           if (!inserted.error) setCompany(inserted.data);
         }
       } else {
-        const m=await client.from("empresa_segura_memberships").select("*").eq("user_id",user.id).order("created_at",{ascending:false}).limit(1).maybeSingle();
+        const m=await client.from("empresa_segura_memberships").select("*, empresa_segura_companies(id,legal_name,trade_name,status)").eq("user_id",user.id).order("created_at",{ascending:false}).limit(1).maybeSingle();
         if (m.error) throw m.error;
         setMembership(m.data);
         if (!m.data && user.user_metadata?.company_id) {
-          const inserted=await client.from("empresa_segura_memberships").insert({user_id:user.id,company_id:user.user_metadata.company_id,department:user.user_metadata.department||null,job_title:user.user_metadata.job_title||null,status:"pending"}).select("*").single();
+          const inserted=await client.from("empresa_segura_memberships").insert({user_id:user.id,company_id:user.user_metadata.company_id,department:user.user_metadata.department||null,job_title:user.user_metadata.job_title||null,status:"pending"}).select("*, empresa_segura_companies(id,legal_name,trade_name,status)").single();
           if (!inserted.error) setMembership(inserted.data);
         }
       }
@@ -93,7 +93,7 @@ export function PortalContent({ pageType, onBack }) {
 
   async function logout(){await client?.auth.signOut();setSession(null);setProfile(null);setCompany(null);setMembership(null);setMode("login");}
   const status= isCompany ? company?.status : membership?.status;
-  const active=profile?.status==="active" && (isCompany ? profile?.role==="company_admin" && company?.status==="approved" : membership?.status==="approved");
+  const active=profile?.status==="active" && (isCompany ? profile?.role==="company_admin" && company?.status==="approved" : membership?.status==="approved" && membership?.empresa_segura_companies?.status==="approved");
   const pending=status==="pending" || profile?.status==="pending";
 
   return <div className="portal-content-shell">
@@ -122,7 +122,7 @@ export function PortalContent({ pageType, onBack }) {
         <div className="portal-account-heading"><div><span>CONTA AUTENTICADA</span><h1>{profile?.full_name||session.user.email}</h1><p>{session.user.email}</p></div><span className={"portal-status-pill "+(active?"approved":pending?"pending":"blocked")}>{active?"Acesso aprovado":pending?"Em análise":"Acesso não autorizado"}</span></div>
         {loading ? <p>Carregando permissões…</p> : active ? <><div className="portal-account-welcome"><CheckCircle2 size={21}/><div><strong>Bem-vindo ao {isCompany?"Portal da Empresa":"Portal do Funcionário"}</strong><p>Seu acesso foi validado para este perfil.</p></div></div>
           {isCompany && company && <div className="portal-account-card"><h2>{company.trade_name||company.legal_name}</h2><p>CNPJ: {company.cnpj}</p><p>Participação aprovada. As áreas de equipe e conteúdos operacionais serão disponibilizadas conforme as permissões do programa.</p></div>}
-          {!isCompany && membership && <div className="portal-account-card"><h2>{"Empresa vinculada"}</h2><p>Setor: {membership.department||"Não informado"} · Cargo: {membership.job_title||"Não informado"}</p></div>}
+          {!isCompany && membership && <div className="portal-account-card"><h2>{membership.empresa_segura_companies?.trade_name||membership.empresa_segura_companies?.legal_name||"Empresa vinculada"}</h2><p>Setor: {membership.department||"Não informado"} · Cargo: {membership.job_title||"Não informado"}</p></div>}
           <div className="portal-content-grid">{(page?.sections||defaults[pageType].sections.map(([title,body])=>({title,body}))).map((section,i)=><article key={section.title||i} className="portal-content-card"><span>SEÇÃO {String(i+1).padStart(2,"0")}</span><h2>{section.title}</h2><p>{section.body?.replace(/<[^>]*>/g,"")||""}</p></article>)}</div>
         </> : <div className="portal-pending-card"><Clock3 size={25}/><h2>{pending?"Solicitação em análise":"Acesso ainda não autorizado"}</h2><p>{pending?"Sua conta foi criada, mas a ENAT precisa aprovar o cadastro da empresa ou o vínculo funcional antes de liberar os dados internos.":"O perfil não tem uma autorização válida para esta área. Confirme se entrou no portal correto ou contate a administração ENAT."}</p><button onClick={()=>refresh(session.user)}>Atualizar situação</button></div>}
         {error&&<div className="portal-auth-message error"><AlertCircle size={16}/>{error}</div>}
