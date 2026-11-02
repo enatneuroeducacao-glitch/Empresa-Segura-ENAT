@@ -136,7 +136,6 @@ export default function App() {
               <div className="step-item" key={number}>
                 <span className="step-number">{number}</span>
                 <div><h3>{title}</h3><p>{text}</p></div>
-                <ChevronRight className="step-chevron" size={20} />
               </div>
             ))}
           </div>
