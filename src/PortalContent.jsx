@@ -18,7 +18,7 @@ export function PortalContent({ pageType, onBack }) {
   const [company, setCompany] = useState(null);
   const [membership, setMembership] = useState(null);
   const [page, setPage] = useState(null);
-  const [form, setForm] = useState({full_name:"",email:"",password:"",legal_name:"",trade_name:"",cnpj:"",contact_email:"",phone:"",sector:"",employee_count:"",company_id:"",department:"",job_title:""});
+  const [form, setForm] = useState({full_name:"",email:"",password:"",legal_name:"",trade_name:"",cnpj:"",contact_email:"",phone:"",sector:"",employee_count:"",company_cnpj:"",department:"",job_title:""});
   const [busy,setBusy] = useState(false);
   const [message,setMessage] = useState("");
   const [error,setError] = useState("");
@@ -50,9 +50,9 @@ export function PortalContent({ pageType, onBack }) {
         const m=await client.from("empresa_segura_memberships").select("*, empresa_segura_companies(id,legal_name,trade_name,status)").eq("user_id",user.id).order("created_at",{ascending:false}).limit(1).maybeSingle();
         if (m.error) throw m.error;
         setMembership(m.data);
-        if (!m.data && user.user_metadata?.company_id) {
-          const inserted=await client.from("empresa_segura_memberships").insert({user_id:user.id,company_id:user.user_metadata.company_id,department:user.user_metadata.department||null,job_title:user.user_metadata.job_title||null,status:"pending"}).select("*, empresa_segura_companies(id,legal_name,trade_name,status)").single();
-          if (!inserted.error) setMembership(inserted.data);
+        if (!m.data && user.user_metadata?.company_cnpj) {
+          const inserted=await client.rpc("empresa_segura_request_membership",{p_cnpj:user.user_metadata.company_cnpj,p_department:user.user_metadata.department||null,p_job_title:user.user_metadata.job_title||null});
+          if (!inserted.error) { const refreshed=await client.from("empresa_segura_memberships").select("*, empresa_segura_companies(id,legal_name,trade_name,status)").eq("user_id",user.id).order("created_at",{ascending:false}).limit(1).maybeSingle(); if(!refreshed.error) setMembership(refreshed.data); }
         }
       }
     } catch(e) { sayError(e); }
@@ -74,10 +74,10 @@ export function PortalContent({ pageType, onBack }) {
       if(mode==="register") {
         if(!form.full_name.trim()) throw new Error("Informe seu nome completo.");
         if(isCompany && (!form.legal_name.trim() || !form.cnpj.trim() || !form.contact_email.trim())) throw new Error("Informe razão social, CNPJ e e-mail de contato.");
-        if(!isCompany && !form.company_id.trim()) throw new Error("Informe o código/ID da empresa fornecido pela organização.");
+        if(!isCompany && !form.company_cnpj.trim()) throw new Error("Informe o CNPJ da empresa participante.");
         const metadata={full_name:form.full_name.trim(),requested_role:isCompany?"company_admin":"employee"};
         if(isCompany) Object.assign(metadata,{legal_name:form.legal_name.trim(),trade_name:form.trade_name.trim(),cnpj:form.cnpj.replace(/\\D/g,""),contact_email:form.contact_email.trim(),phone:form.phone.trim(),sector:form.sector.trim(),employee_count:form.employee_count});
-        else Object.assign(metadata,{company_id:form.company_id.trim(),department:form.department.trim(),job_title:form.job_title.trim()});
+        else Object.assign(metadata,{company_cnpj:form.company_cnpj.replace(/\\D/g,""),department:form.department.trim(),job_title:form.job_title.trim()});
         const {data,error:authError}=await client.auth.signUp({email:form.email.trim(),password:form.password,options:{data:metadata,emailRedirectTo:window.location.origin}});
         if(authError) throw authError;
         if(data.session){setSession(data.session);await refresh(data.session.user);setMessage("Solicitação registrada. O acesso ficará pendente até a aprovação da ENAT.");}
@@ -112,7 +112,7 @@ export function PortalContent({ pageType, onBack }) {
             <label>E-mail</label><input required type="email" value={form.email} onChange={e=>change("email",e.target.value)} autoComplete="email" placeholder="voce@empresa.com.br"/>
             <label>Senha</label><input required type="password" minLength={8} value={form.password} onChange={e=>change("password",e.target.value)} autoComplete={mode==="login"?"current-password":"new-password"} placeholder="Mínimo de 8 caracteres"/>
             {mode==="register" && isCompany && <><label>Razão social</label><input required value={form.legal_name} onChange={e=>change("legal_name",e.target.value)} placeholder="Nome empresarial"/><label>Nome fantasia (opcional)</label><input value={form.trade_name} onChange={e=>change("trade_name",e.target.value)} placeholder="Nome público"/><label>CNPJ</label><input required value={form.cnpj} onChange={e=>change("cnpj",e.target.value)} placeholder="00.000.000/0000-00"/><label>E-mail de contato da empresa</label><input required type="email" value={form.contact_email} onChange={e=>change("contact_email",e.target.value)} placeholder="contato@empresa.com.br"/><label>Telefone</label><input value={form.phone} onChange={e=>change("phone",e.target.value)} placeholder="(00) 00000-0000"/><label>Setor de atuação</label><input value={form.sector} onChange={e=>change("sector",e.target.value)} placeholder="Ex.: transporte, indústria, serviços"/><label>Número aproximado de funcionários</label><input type="number" min="1" value={form.employee_count} onChange={e=>change("employee_count",e.target.value)} placeholder="Quantidade"/></>}
-            {mode==="register" && !isCompany && <><label>Código/ID da empresa</label><input required value={form.company_id} onChange={e=>change("company_id",e.target.value)} placeholder="Solicite o identificador à empresa"/><label>Setor/departamento</label><input value={form.department} onChange={e=>change("department",e.target.value)} placeholder="Seu setor"/><label>Cargo</label><input value={form.job_title} onChange={e=>change("job_title",e.target.value)} placeholder="Seu cargo"/></>}
+            {mode==="register" && !isCompany && <><label>CNPJ da empresa participante</label><input required value={form.company_cnpj} onChange={e=>change("company_cnpj",e.target.value)} placeholder="00.000.000/0000-00"/><label>Setor/departamento</label><input value={form.department} onChange={e=>change("department",e.target.value)} placeholder="Seu setor"/><label>Cargo</label><input value={form.job_title} onChange={e=>change("job_title",e.target.value)} placeholder="Seu cargo"/></>}
             <button className="portal-auth-submit" disabled={busy||loading}>{busy?"Processando…":mode==="login"?"Entrar com segurança": "Enviar solicitação"}</button>
           </form>
           {error&&<div className="portal-auth-message error"><AlertCircle size={16}/>{error}</div>}{message&&<div className="portal-auth-message success"><CheckCircle2 size={16}/>{message}</div>}
