@@ -71,12 +71,12 @@ export function AdminContent({onBack}) {
   async function signOut(){await client?.auth.signOut();setSession(null);setAdmin(null);}
   async function act(id,fn,success){setBusyId(id);setError("");setNotice("");try{const {error:e}=await fn();if(e)throw e;setNotice(success);await loadData();}catch(e){setError(e.message||"Operação não concluída.");}finally{setBusyId("");}}
   async function reviewCompany(c,approved){await act(c.id,async()=>{
-    const r=await client.from("empresa_segura_companies").update({status:approved?"approved":"rejected",reviewed_by:session.user.id,reviewed_at:new Date().toISOString()}).eq("id",c.id);
+    const r=await client.from("empresa_segura_companies").update({status:approved?"ATIVA":"INATIVA",reviewed_by:session.user.id,reviewed_at:new Date().toISOString()}).eq("id",c.id);
     if(r.error)return r;
     if(approved)return await client.from("empresa_segura_profiles").update({role:"company_admin",status:"active"}).eq("user_id",c.owner_user_id);
     return await client.from("empresa_segura_profiles").update({status:"rejected"}).eq("user_id",c.owner_user_id);
   },approved?"Empresa aprovada e perfil do responsável habilitado.":"Solicitação de empresa rejeitada.");}
-  async function reviewMember(m,approved){if(approved && m.empresa_segura_companies?.status!=="approved"){setError("A empresa precisa ser aprovada antes de autorizar o vínculo do funcionário.");return;}await act(m.id,async()=>{
+  async function reviewMember(m,approved){if(approved && !["approved","ATIVA"].includes(m.empresa_segura_companies?.status)){setError("A empresa precisa ser aprovada antes de autorizar o vínculo do funcionário.");return;}await act(m.id,async()=>{
     const r=await client.from("empresa_segura_memberships").update({status:approved?"approved":"rejected",reviewed_by:session.user.id,reviewed_at:new Date().toISOString()}).eq("id",m.id);
     if(r.error)return r;
     const anyApproved=approved?true:memberships.some(x=>x.user_id===m.user_id&&x.id!==m.id&&x.status==="approved");
