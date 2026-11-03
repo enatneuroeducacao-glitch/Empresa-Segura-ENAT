@@ -423,6 +423,114 @@ app.get("/api/company/reports", requireUser, async (req, res) => {
   }
 });
 
+
+app.post("/api/event-participants", requireUser, async (req, res) => {
+  const fullName = String(req.body?.full_name || req.user.user_metadata?.full_name || "").trim().slice(0, 160);
+  const eventName = String(req.body?.event_name || "").trim().slice(0, 200);
+  const city = String(req.body?.city || "").trim().slice(0, 120);
+  const phone = String(req.body?.phone || "").trim().slice(0, 40) || null;
+  const employmentStatus = ["unemployed", "employed", "student", "self_employed", "other"].includes(String(req.body?.employment_status || "")) ? String(req.body.employment_status) : "other";
+  const goals = String(req.body?.goals || "").trim().slice(0, 1500) || null;
+  if (!fullName || !eventName || !city) return res.status(400).json({ error: "Informe nome completo, evento de interesse e cidade." });
+  try {
+    const result = await pool.query(
+      `INSERT INTO public.empresa_segura_event_participants
+       (user_id, full_name, email, phone, city, employment_status, event_name, goals, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending')
+       ON CONFLICT (user_id, event_name) DO UPDATE SET
+         full_name=EXCLUDED.full_name, email=EXCLUDED.email, phone=EXCLUDED.phone,
+         city=EXCLUDED.city, employment_status=EXCLUDED.employment_status, goals=EXCLUDED.goals,
+         updated_at=now()
+       RETURNING id, full_name, email, phone, city, employment_status, event_name, goals, status, created_at, updated_at`,
+      [req.user.id, fullName, req.user.email || null, phone, city, employmentStatus, eventName, goals]
+    );
+    res.status(201).json({ participant: result.rows[0] });
+  } catch (error) {
+    console.error("event participant registration failed:", error?.message);
+    res.status(500).json({ error: safeError(error) });
+  }
+});
+
+app.get("/api/event-participants/mine", requireUser, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, full_name, email, phone, city, employment_status, event_name, goals, status,
+              reviewed_at, attendance_confirmed_at, report_issued_at, report_code, created_at
+       FROM public.empresa_segura_event_participants WHERE user_id=$1
+       ORDER BY created_at DESC LIMIT 50`,
+      [req.user.id]
+    );
+    res.json({ participants: result.rows });
+  } catch (error) {
+    console.error("event participant self-read failed:", error?.message);
+    res.status(500).json({ error: safeError(error) });
+  }
+});
+
+app.get("/api/admin/event-participants", requireUser, requireAdmin, async (_req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, user_id, full_name, email, phone, city, employment_status, event_name, goals,
+              status, reviewed_at, reviewed_by, attendance_confirmed_at, attendance_confirmed_by,
+              report_issued_at, report_code, created_at, updated_at
+       FROM public.empresa_segura_event_participants
+       ORDER BY created_at DESC LIMIT 500`
+    );
+    res.json({ participants: result.rows });
+  } catch (error) {
+    console.error("admin event participants read failed:", error?.message);
+    res.status(500).json({ error: safeError(error) });
+  }
+});
+
+app.patch("/api/admin/event-participants/:id/status", requireUser, requireAdmin, async (req, res) => {
+  const status = String(req.body?.status || "");
+  if (!["approved", "rejected", "attended"].includes(status)) {
+    return res.status(400).json({ error: "Situação inválida." });
+  }
+  const db = await pool.connect();
+  try {
+    await db.query("BEGIN");
+    const current = await db.query("SELECT * FROM public.empresa_segura_event_participants WHERE id=$1 FOR UPDATE", [req.params.id]);
+    if (!current.rowCount) {
+      await db.query("ROLLBACK");
+      return res.status(404).json({ error: "Inscrição de evento não encontrada." });
+    }
+    const row = current.rows[0];
+    if (status === "attended" && row.status !== "approved" && row.status !== "attended") {
+      await db.query("ROLLBACK");
+      return res.status(409).json({ error: "A inscrição precisa estar aprovada antes da confirmação de presença." });
+    }
+    const updated = await db.query(
+      `UPDATE public.empresa_segura_event_participants
+       SET status=$2,
+           reviewed_by=CASE WHEN $2 IN ('approved','rejected') THEN $3 ELSE reviewed_by END,
+           reviewed_at=CASE WHEN $2 IN ('approved','rejected') THEN now() ELSE reviewed_at END,
+           attendance_confirmed_by=CASE WHEN $2='attended' THEN $3 ELSE attendance_confirmed_by END,
+           attendance_confirmed_at=CASE WHEN $2='attended' THEN now() ELSE attendance_confirmed_at END,
+           report_issued_at=CASE WHEN $2='attended' THEN COALESCE(report_issued_at,now()) WHEN $2='rejected' THEN NULL ELSE report_issued_at END,
+           report_code=CASE WHEN $2='attended' THEN COALESCE(report_code,'ENAT-' || upper(substr(replace(gen_random_uuid()::text,'-',''),1,12))) WHEN $2='rejected' THEN NULL ELSE report_code END,
+           updated_at=now()
+       WHERE id=$1
+       RETURNING id, full_name, event_name, status, reviewed_at, attendance_confirmed_at, report_issued_at, report_code, updated_at`,
+      [req.params.id, status, req.user.id]
+    );
+    await db.query(
+      `INSERT INTO public.empresa_segura_audit_log (actor_user_id, action, table_name, record_id, before_data, after_data)
+       VALUES ($1,$2,'empresa_segura_event_participants',$3,$4::jsonb,$5::jsonb)`,
+      [req.user.id, "event_participant." + status, req.params.id, JSON.stringify({status:row.status}), JSON.stringify(updated.rows[0])]
+    );
+    await db.query("COMMIT");
+    res.json({ participant: updated.rows[0] });
+  } catch (error) {
+    await db.query("ROLLBACK");
+    console.error("event participant status update failed:", error?.message);
+    res.status(500).json({ error: safeError(error) });
+  } finally {
+    db.release();
+  }
+});
+
 app.use((error, _req, res, _next) => {
   if (error?.message === "Origem não autorizada pelo CORS.") {
     return res.status(403).json({ error: "Origem não autorizada." });
