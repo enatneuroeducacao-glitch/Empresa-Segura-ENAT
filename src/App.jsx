@@ -2,9 +2,10 @@ import React from "react";
 import { useState } from 'react';
 import { PortalContent } from './PortalContent';
 import { AdminContent } from './AdminContent';
+import { EventParticipant } from './EventParticipant';
 import {
   ArrowRight, ShieldCheck, Brain, Users, ClipboardCheck, Building2,
-  Menu, X, ChevronRight, CheckCircle2, LockKeyhole, HardHat, CarFront,
+  Menu, X, ChevronRight, CheckCircle2, LockKeyhole, HardHat, CarFront, CalendarCheck,
   BarChart3, HeartHandshake
 } from 'lucide-react';
 
@@ -26,7 +27,7 @@ export default function App() {
   const [accessType, setAccessType] = useState(null);
   const [portalType, setPortalType] = useState(() => {
     const initial = window.location.hash.replace("#portal-", "");
-    return ["empresa", "funcionario", "admin"].includes(initial) ? initial : null;
+    return ["empresa", "funcionario", "admin", "evento"].includes(initial) ? initial : null;
   });
   const openPortal = (type) => { setAccessType(null); setPortalType(type); window.location.hash = `portal-${type}`; };
   const closePortal = () => { setPortalType(null); window.location.hash = 'inicio'; };
@@ -38,6 +39,7 @@ export default function App() {
   };
 
   if (portalType === 'admin') return <AdminContent onBack={closePortal} />;
+  if (portalType === 'evento') return <EventParticipant onBack={closePortal} />;
   if (portalType) return <PortalContent pageType={portalType} onBack={closePortal} />;
 
   return (
@@ -68,6 +70,7 @@ export default function App() {
             <div className="hero-actions">
               <button className="button-primary" onClick={() => goTo('programa')}>Conheça o programa <ArrowRight size={18} /></button>
               <button className="button-ghost" onClick={() => setAccessType('empresa')}>Acessar área da empresa</button>
+              <button className="button-ghost" onClick={() => openPortal('evento')}><CalendarCheck size={16}/> Participar de evento ENAT</button>
             </div>
             <div className="hero-note"><ShieldCheck size={17} /> Uma iniciativa ENAT — Ensino Neuroeducacional Aplicado ao Trânsito</div>
           </div>
@@ -129,7 +132,7 @@ export default function App() {
             <span className="section-label">COMECE AQUI</span>
             <h2>Um caminho claro para<br /><em>evoluir com segurança.</em></h2>
             <p>A participação começa com o conhecimento do programa e a organização dos próximos passos de acordo com a realidade de cada empresa.</p>
-            <button className="button-primary" onClick={() => setAccessType('empresa')}>Área da empresa <ArrowRight size={18} /></button>
+            <div className="process-actions"><button className="button-primary" onClick={() => setAccessType('empresa')}>Área da empresa <ArrowRight size={18} /></button><button className="button-ghost" onClick={() => openPortal('evento')}><CalendarCheck size={17}/> Participante individual ENAT</button></div>
           </div>
           <div className="steps-list">
             {steps.map(([number, title, text]) => (
@@ -144,7 +147,7 @@ export default function App() {
         <section className="cta-section">
           <div className="cta-symbol"><Building2 size={29} /></div>
           <div className="cta-copy"><span className="section-label">EMPRESA SEGURA ENAT</span><h2>O próximo passo é construir<br />uma cultura de prevenção.</h2><p>Conheça o programa e prepare sua organização para avançar.</p></div>
-          <button className="button-light" onClick={() => setAccessType('empresa')}>Acessar área da empresa <ArrowRight size={18} /></button>
+          <div className="cta-actions"><button className="button-light" onClick={() => setAccessType('empresa')}>Acessar área da empresa <ArrowRight size={18} /></button><button className="button-light" onClick={() => openPortal('evento')}><CalendarCheck size={17}/> Participar de evento</button></div>
         </section>
       </main>
 
@@ -170,6 +173,7 @@ export default function App() {
             <div className="portal-choice-actions">
               <button className="button-primary modal-button" onClick={() => openPortal('empresa')}><Building2 size={17}/> Acesso da empresa / solicitar cadastro <ArrowRight size={18} /></button>
               <button className="button-ghost modal-button" onClick={() => openPortal('funcionario')}><Users size={17}/> Acesso do funcionário <ArrowRight size={18} /></button>
+              <button className="button-ghost modal-button" onClick={() => openPortal('evento')}><CalendarCheck size={17}/> Participar de evento ENAT <ArrowRight size={18} /></button>
             </div>
             <p className="modal-footnote"><ShieldCheck size={14} /> Não existem contas ou senhas demonstrativas. O login real será habilitado com autenticação segura, aprovação da empresa e permissões administradas pela ENAT.</p>
           </section>
