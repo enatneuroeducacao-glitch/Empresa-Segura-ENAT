@@ -245,6 +245,184 @@ app.patch("/api/admin/companies/:id/review", requireUser, requireAdmin, async (r
   }
 });
 
+
+app.get("/api/admin/measurements", requireUser, requireAdmin, async (req, res) => {
+  const allowedPeriods = new Set(["30", "90", "365"]);
+  const period = allowedPeriods.has(String(req.query.period || "")) ? Number(req.query.period) : null;
+  const status = ["draft", "processed", "approved", "published", "archived"].includes(String(req.query.status || "")) ? String(req.query.status) : null;
+  const measurementType = String(req.query.type || "").trim().slice(0, 80) || null;
+  const search = String(req.query.q || "").trim().slice(0, 160) || null;
+  try {
+    const result = await pool.query(
+      `SELECT m.*, c.legal_name, c.trade_name, c.cnpj
+       FROM public.empresa_segura_measurements m
+       JOIN public.empresa_segura_companies c ON c.id = m.company_id
+       WHERE ($1::integer IS NULL OR m.created_at >= now() - ($1::text || ' days')::interval)
+         AND ($2::text IS NULL OR m.status = $2)
+         AND ($3::text IS NULL OR m.measurement_type = $3)
+         AND ($4::text IS NULL OR m.report_title ILIKE '%' || $4 || '%' OR c.legal_name ILIKE '%' || $4 || '%' OR c.trade_name ILIKE '%' || $4 || '%' OR c.cnpj ILIKE '%' || $4 || '%')
+       ORDER BY m.created_at DESC LIMIT 500`,
+      [period, status, measurementType, search]
+    );
+    res.json({ measurements: result.rows });
+  } catch (error) {
+    console.error("admin measurements read failed:", error?.message);
+    res.status(500).json({ error: safeError(error) });
+  }
+});
+
+app.post("/api/admin/measurements", requireUser, requireAdmin, async (req, res) => {
+  const companyId = String(req.body?.company_id || "");
+  const employeeId = req.body?.employee_user_id ? String(req.body.employee_user_id) : null;
+  const title = String(req.body?.report_title || "").trim().slice(0, 200);
+  const type = String(req.body?.measurement_type || "general").trim().slice(0, 80) || "general";
+  const rawData = req.body?.raw_data && typeof req.body.raw_data === "object" && !Array.isArray(req.body.raw_data) ? req.body.raw_data : null;
+  if (!/^[0-9a-f-]{36}$/i.test(companyId) || (employeeId && !/^[0-9a-f-]{36}$/i.test(employeeId)) || !title || !rawData) {
+    return res.status(400).json({ error: "Informe empresa, título e dados originais em formato de objeto." });
+  }
+  try {
+    const company = await pool.query("SELECT id FROM public.empresa_segura_companies WHERE id = $1 LIMIT 1", [companyId]);
+    if (!company.rowCount) return res.status(404).json({ error: "Empresa não encontrada." });
+    const result = await pool.query(
+      `INSERT INTO public.empresa_segura_measurements
+       (company_id, employee_user_id, report_title, measurement_type, raw_data, processed_data, status, audience, created_by)
+       VALUES ($1,$2,$3,$4,$5::jsonb,'{}'::jsonb,'draft','employee',$6)
+       RETURNING id, company_id, employee_user_id, report_title, measurement_type, status, audience, created_at`,
+      [companyId, employeeId, title, type, JSON.stringify(rawData), req.user.id]
+    );
+    await pool.query(
+      `INSERT INTO public.empresa_segura_audit_log (actor_user_id, action, table_name, record_id, after_data)
+       VALUES ($1,'measurement.created','empresa_segura_measurements',$2,$3::jsonb)`,
+      [req.user.id, result.rows[0].id, JSON.stringify({ company_id: companyId, employee_user_id: employeeId, status: "draft" })]
+    );
+    res.status(201).json({ measurement: result.rows[0] });
+  } catch (error) {
+    console.error("admin measurement create failed:", error?.message);
+    res.status(500).json({ error: safeError(error) });
+  }
+});
+
+app.patch("/api/admin/measurements/:id/workflow", requireUser, requireAdmin, async (req, res) => {
+  const action = String(req.body?.action || "");
+  if (!["process", "approve", "publish", "archive"].includes(action)) {
+    return res.status(400).json({ error: "Ação inválida para o fluxo de tratamento." });
+  }
+  const processedData = req.body?.processed_data && typeof req.body.processed_data === "object" && !Array.isArray(req.body.processed_data) ? req.body.processed_data : null;
+  const audience = ["employee", "company", "both"].includes(String(req.body?.audience || "")) ? String(req.body.audience) : null;
+  const db = await pool.connect();
+  try {
+    await db.query("BEGIN");
+    const current = await db.query("SELECT * FROM public.empresa_segura_measurements WHERE id = $1 FOR UPDATE", [req.params.id]);
+    if (!current.rowCount) {
+      await db.query("ROLLBACK");
+      return res.status(404).json({ error: "Registro de mensuração não encontrado." });
+    }
+    const row = current.rows[0];
+    let updated;
+    if (action === "process") {
+      if (!processedData || !audience) {
+        await db.query("ROLLBACK");
+        return res.status(400).json({ error: "Informe os dados tratados e o público autorizado." });
+      }
+      if (audience !== "company" && !row.employee_user_id) {
+        await db.query("ROLLBACK");
+        return res.status(400).json({ error: "Relatórios individuais precisam estar vinculados a um funcionário." });
+      }
+      updated = await db.query(
+        `UPDATE public.empresa_segura_measurements SET processed_data=$2::jsonb, audience=$3, status='processed', processed_by=$4, processed_at=now(), updated_at=now()
+         WHERE id=$1 RETURNING id, company_id, employee_user_id, report_title, measurement_type, status, audience, processed_at, updated_at`,
+        [req.params.id, JSON.stringify(processedData), audience, req.user.id]
+      );
+    } else if (action === "approve") {
+      if (row.status !== "processed") {
+        await db.query("ROLLBACK");
+        return res.status(409).json({ error: "O registro precisa ser tratado antes da aprovação." });
+      }
+      updated = await db.query(
+        `UPDATE public.empresa_segura_measurements SET status='approved', approved_by=$2, approved_at=now(), updated_at=now()
+         WHERE id=$1 RETURNING id, company_id, employee_user_id, report_title, measurement_type, status, audience, approved_at, updated_at`,
+        [req.params.id, req.user.id]
+      );
+    } else if (action === "publish") {
+      if (row.status !== "approved") {
+        await db.query("ROLLBACK");
+        return res.status(409).json({ error: "Somente relatórios tratados e aprovados podem ser publicados." });
+      }
+      updated = await db.query(
+        `UPDATE public.empresa_segura_measurements SET status='published', published_by=$2, published_at=now(), updated_at=now()
+         WHERE id=$1 RETURNING id, company_id, employee_user_id, report_title, measurement_type, status, audience, published_at, updated_at`,
+        [req.params.id, req.user.id]
+      );
+    } else {
+      updated = await db.query(
+        `UPDATE public.empresa_segura_measurements SET status='archived', updated_at=now()
+         WHERE id=$1 RETURNING id, company_id, employee_user_id, report_title, measurement_type, status, audience, updated_at`,
+        [req.params.id]
+      );
+    }
+    await db.query(
+      `INSERT INTO public.empresa_segura_audit_log (actor_user_id, action, table_name, record_id, before_data, after_data)
+       VALUES ($1,$2,'empresa_segura_measurements',$3,$4::jsonb,$5::jsonb)`,
+      [req.user.id, "measurement." + action, req.params.id, JSON.stringify({ status: row.status, audience: row.audience }), JSON.stringify(updated.rows[0])]
+    );
+    await db.query("COMMIT");
+    res.json({ measurement: updated.rows[0] });
+  } catch (error) {
+    await db.query("ROLLBACK");
+    console.error("measurement workflow failed:", error?.message);
+    res.status(500).json({ error: safeError(error) });
+  } finally {
+    db.release();
+  }
+});
+
+app.get("/api/employee/reports", requireUser, async (req, res) => {
+  try {
+    const access = await pool.query(
+      `SELECT 1 FROM public.empresa_segura_profiles p
+       JOIN public.empresa_segura_memberships m ON m.user_id=p.user_id AND m.status='approved'
+       JOIN public.empresa_segura_companies c ON c.id=m.company_id AND c.status='ATIVA'
+       WHERE p.user_id=$1 AND p.role='employee' AND p.status='active' LIMIT 1`,
+      [req.user.id]
+    );
+    if (!access.rowCount) return res.status(403).json({ error: "Vínculo funcional ativo não encontrado." });
+    const result = await pool.query(
+      `SELECT id, report_title, measurement_type, processed_data, published_at, created_at
+       FROM public.empresa_segura_measurements
+       WHERE employee_user_id=$1 AND status='published' AND audience IN ('employee','both')
+       ORDER BY published_at DESC LIMIT 100`,
+      [req.user.id]
+    );
+    res.json({ reports: result.rows });
+  } catch (error) {
+    console.error("employee reports read failed:", error?.message);
+    res.status(500).json({ error: safeError(error) });
+  }
+});
+
+app.get("/api/company/reports", requireUser, async (req, res) => {
+  try {
+    const access = await pool.query(
+      `SELECT id FROM public.empresa_segura_companies
+       WHERE owner_user_id=$1 AND status='ATIVA' LIMIT 1`,
+      [req.user.id]
+    );
+    if (!access.rowCount) return res.status(403).json({ error: "Acesso empresarial ativo não encontrado." });
+    const companyId = access.rows[0].id;
+    const result = await pool.query(
+      `SELECT id, report_title, measurement_type, processed_data, published_at, created_at
+       FROM public.empresa_segura_measurements
+       WHERE company_id=$1 AND status='published' AND audience IN ('company','both')
+       ORDER BY published_at DESC LIMIT 200`,
+      [companyId]
+    );
+    res.json({ reports: result.rows });
+  } catch (error) {
+    console.error("company reports read failed:", error?.message);
+    res.status(500).json({ error: safeError(error) });
+  }
+});
+
 app.use((error, _req, res, _next) => {
   if (error?.message === "Origem não autorizada pelo CORS.") {
     return res.status(403).json({ error: "Origem não autorizada." });
