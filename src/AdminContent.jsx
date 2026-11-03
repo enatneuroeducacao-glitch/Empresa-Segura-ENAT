@@ -6,7 +6,7 @@ import { createClient } from "@supabase/supabase-js";
 const url=import.meta.env.VITE_SUPABASE_URL;
 const key=import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 const client=url&&key?createClient(url,key):null;
-const tabs=[["companies","Empresas",Building2],["people","Funcionários",Users],["content","Conteúdo",BookOpenCheck],["audit","Auditoria",Activity]];
+const tabs=[["companies","Empresas",Building2],["people","Funcionários",Users],["reports","Relatórios",FileText],["content","Conteúdo",BookOpenCheck],["audit","Auditoria",Activity]];
 
 export function AdminContent({onBack}) {
   const [email,setEmail]=useState("");
@@ -26,6 +26,11 @@ export function AdminContent({onBack}) {
   const [error,setError]=useState("");
   const [notice,setNotice]=useState("");
   const [showInfo,setShowInfo]=useState(false);
+  const [reportType,setReportType]=useState("todos");
+  const [reportStatus,setReportStatus]=useState("todas");
+  const [reportPeriod,setReportPeriod]=useState("todos");
+  const [reportSearch,setReportSearch]=useState("");
+  const [reportDetail,setReportDetail]=useState(null);
 
   async function verifyAndLoad(s) {
     if(!client||!s?.user)return;
@@ -106,9 +111,48 @@ export function AdminContent({onBack}) {
     <div className="admin-metrics"><article><span>Empresas cadastradas</span><strong>{companies.length}</strong><small>{pendingCompanies} aguardando análise</small></article><article><span>Contas individuais</span><strong>{profiles.length}</strong><small>{pendingMembers} vínculos pendentes</small></article><article><span>Páginas publicadas</span><strong>{pages.filter(p=>p.published).length}</strong><small>Conteúdo do portal</small></article><article><span>Eventos de auditoria</span><strong>{audit.length}</strong><small>Últimos 200 eventos</small></article></div>
     {tab==="companies"&&<section className="admin-data-panel"><div className="admin-panel-heading"><div><h2>Solicitações de empresas</h2><p>Confira os dados e aprove ou rejeite o cadastro institucional.</p></div><span>{companies.length} registros</span></div>{companies.length===0?<div className="admin-empty">Nenhuma solicitação de empresa encontrada.</div>:<div className="admin-table-wrap"><table><thead><tr><th>Empresa</th><th>CNPJ</th><th>Contato</th><th>Status</th><th>Recebida em</th><th>Ações</th></tr></thead><tbody>{companies.map(c=><tr key={c.id}><td><strong>{c.trade_name||c.legal_name}</strong><small>{c.legal_name}</small></td><td>{c.cnpj}</td><td>{c.contact_email}<small>{c.phone||"Telefone não informado"}</small></td><td><span className={"admin-state "+c.status}>{c.status}</span></td><td>{new Date(c.created_at).toLocaleDateString("pt-BR")}</td><td>{c.status==="pending"?<div className="admin-row-actions"><button disabled={busyId===c.id} onClick={()=>reviewCompany(c,true)}><CheckCircle2 size={14}/> Aprovar</button><button className="reject" disabled={busyId===c.id} onClick={()=>reviewCompany(c,false)}><XCircle size={14}/> Rejeitar</button></div>:<span className="admin-muted">{c.review_note||"Analisada"}</span>}</td></tr>)}</tbody></table></div>}</section>}
     {tab==="people"&&<><section className="admin-data-panel"><div className="admin-panel-heading"><div><h2>Solicitações de vínculo</h2><p>Aprove o vínculo de funcionários à empresa participante.</p></div><span>{memberships.length} vínculos</span></div>{memberships.length===0?<div className="admin-empty">Nenhum vínculo encontrado.</div>:<div className="admin-table-wrap"><table><thead><tr><th>Conta</th><th>Empresa</th><th>Setor / cargo</th><th>Status</th><th>Ações</th></tr></thead><tbody>{memberships.map(m=><tr key={m.id}><td>{profiles.find(p=>p.user_id===m.user_id)?.full_name||m.user_id.slice(0,8)}</td><td>{m.empresa_segura_companies?.trade_name||m.empresa_segura_companies?.legal_name||m.company_id}</td><td>{m.department||"—"} / {m.job_title||"—"}</td><td><span className={"admin-state "+m.status}>{m.status}</span></td><td>{m.status==="pending"?<div className="admin-row-actions"><button disabled={busyId===m.id} onClick={()=>reviewMember(m,true)}><CheckCircle2 size={14}/> Aprovar</button><button className="reject" disabled={busyId===m.id} onClick={()=>reviewMember(m,false)}><XCircle size={14}/> Rejeitar</button></div>:<span className="admin-muted">—</span>}</td></tr>)}</tbody></table></div>}</section><section className="admin-data-panel"><div className="admin-panel-heading"><div><h2>Contas cadastradas</h2><p>Perfis, situação e data de criação.</p></div></div><div className="admin-table-wrap"><table><thead><tr><th>Nome</th><th>Perfil</th><th>Status</th><th>Criado em</th></tr></thead><tbody>{profiles.map(p=><tr key={p.user_id}><td>{p.full_name||p.user_id.slice(0,8)}</td><td>{p.role}</td><td><span className={"admin-state "+p.status}>{p.status}</span></td><td>{new Date(p.created_at).toLocaleDateString("pt-BR")}</td></tr>)}</tbody></table></div></section></>}
+    {tab==="reports"&&(()=>{
+      const now=Date.now();
+      const cutoff=reportPeriod==="30"?now-30*86400000:reportPeriod==="90"?now-90*86400000:reportPeriod==="365"?now-365*86400000:0;
+      const rows=[
+        ...companies.map(c=>({id:"company:"+c.id,type:"empresa",typeLabel:"Empresa",name:c.trade_name||c.legal_name||"Empresa sem nome",identifier:c.cnpj||"CNPJ não informado",status:String(c.status||"sem_status"),date:c.created_at,subtitle:c.contact_email||c.phone||"",company:c.legal_name,details:c})),
+        ...profiles.map(p=>({id:"profile:"+p.user_id,type:"funcionario",typeLabel:"Perfil",name:p.full_name||p.user_id,identifier:p.user_id,status:String(p.status||"sem_status"),date:p.created_at,subtitle:p.role||p.requested_role||"",company:"",details:p})),
+        ...memberships.map(m=>({id:"membership:"+m.id,type:"funcionario",typeLabel:"Vínculo",name:profiles.find(p=>p.user_id===m.user_id)?.full_name||m.user_id||"Funcionário",identifier:m.user_id||m.id,status:String(m.status||"sem_status"),date:m.created_at,subtitle:[m.department,m.job_title].filter(Boolean).join(" · "),company:m.empresa_segura_companies?.trade_name||m.empresa_segura_companies?.legal_name||m.company_id||"",details:m})),
+        ...audit.map(a=>({id:"audit:"+a.id,type:"historico",typeLabel:"Histórico",name:a.action||"Evento",identifier:a.record_id||"—",status:String(a.action||"registrado"),date:a.created_at,subtitle:a.table_name||"",company:"",details:a}))
+      ];
+      const filtered=rows.filter(r=>{
+        if(reportType!=="todos"&&r.type!==reportType)return false;
+        if(reportStatus!=="todas"&&r.status.toLowerCase()!==reportStatus.toLowerCase())return false;
+        if(cutoff&&(!r.date||new Date(r.date).getTime()<cutoff))return false;
+        const q=reportSearch.trim().toLowerCase();
+        return !q||[r.name,r.identifier,r.subtitle,r.company,r.status,r.typeLabel].some(v=>String(v||"").toLowerCase().includes(q));
+      }).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0));
+      const exportRows=()=>{
+        const columns=["Tipo","Nome/Evento","Identificador","Situação","Data","Empresa/Contexto","Complemento"];
+        const quote=v=>'"'+String(v??"").replace(/"/g,'""')+'"';
+        const csv="\uFEFF"+[columns,...filtered.map(r=>[r.typeLabel,r.name,r.identifier,r.status,r.date?new Date(r.date).toLocaleString("pt-BR"):"",r.company,r.subtitle])].map(row=>row.map(quote).join(";")).join("\r\n");
+        const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8;"}));
+        const a=document.createElement("a");a.href=url;a.download="empresa-segura-relatorios.csv";a.click();URL.revokeObjectURL(url);
+      };
+      return <section className="admin-data-panel es-report-panel">
+        <div className="admin-panel-heading"><div><h2>Relatórios de cadastros e histórico</h2><p>Consulta os registros disponíveis no Supabase. Dados originais e informações mensuradas permanecem restritos à administração.</p></div><span>{filtered.length} registros</span></div>
+        <div className="es-report-filters">
+          <label className="es-report-search"><span>Pesquisar</span><div><Search size={15}/><input value={reportSearch} onChange={e=>setReportSearch(e.target.value)} placeholder="Empresa, CNPJ, usuário, evento…"/></div></label>
+          <label><span>Tipo</span><select value={reportType} onChange={e=>setReportType(e.target.value)}><option value="todos">Todos</option><option value="empresa">Empresas</option><option value="funcionario">Funcionários e vínculos</option><option value="historico">Histórico</option></select></label>
+          <label><span>Situação</span><select value={reportStatus} onChange={e=>setReportStatus(e.target.value)}><option value="todas">Todas</option><option value="pending">Pendente</option><option value="active">Ativo</option><option value="approved">Aprovado</option><option value="rejected">Rejeitado</option><option value="INATIVA">Inativa</option><option value="ATIVA">Ativa</option></select></label>
+          <label><span>Período</span><select value={reportPeriod} onChange={e=>setReportPeriod(e.target.value)}><option value="todos">Todo o período</option><option value="30">Últimos 30 dias</option><option value="90">Últimos 90 dias</option><option value="365">Últimos 12 meses</option></select></label>
+        </div>
+        <div className="es-report-actions"><span>Atualize a Central para consultar os dados mais recentes.</span><div><button onClick={exportRows} disabled={!filtered.length}><Download size={14}/> Exportar Excel/CSV</button><button onClick={()=>window.print()}><Printer size={14}/> Imprimir / PDF</button></div></div>
+        <div className="admin-table-wrap"><table><thead><tr><th>Tipo</th><th>Registro</th><th>Identificador</th><th>Empresa / contexto</th><th>Situação</th><th>Data</th><th>Detalhes</th></tr></thead><tbody>
+        {filtered.length===0?<tr><td colSpan="7"><div className="admin-empty">Nenhum registro corresponde aos filtros selecionados.</div></td></tr>:filtered.map(r=><tr key={r.id}><td><span className="es-report-type">{r.typeLabel}</span></td><td><strong>{r.name}</strong><small>{r.subtitle||"—"}</small></td><td>{r.identifier}</td><td>{r.company||"—"}</td><td><span className={"admin-state "+r.status.toLowerCase()}>{r.status}</span></td><td>{r.date?new Date(r.date).toLocaleString("pt-BR"):"—"}</td><td><button className="es-report-detail" onClick={()=>setReportDetail(r)}><Eye size={14}/> Abrir</button></td></tr>)}
+        </tbody></table></div>
+        <p className="es-report-privacy"><ShieldCheck size={15}/> Esta tela consolida cadastros e eventos existentes. Mensurações, tratamento e publicação segregada por empresa exigem a estrutura específica de relatórios e homologação do banco.</p>
+      </section>;
+    })()}
     {tab==="content"&&<section className="admin-data-panel"><div className="admin-panel-heading"><div><h2>Editor de conteúdo institucional</h2><p>Edite o JSON da página. Salvar mantém como rascunho; publicar libera a versão atual.</p></div><span className={"admin-state "+(currentPage?.published?"approved":"pending")}>{currentPage?.published?"Publicado":"Rascunho"}</span></div><div className="admin-content-toolbar"><label>Área do portal<select value={pageType} onChange={e=>setPageType(e.target.value)}><option value="empresa">Portal da Empresa</option><option value="funcionario">Portal do Funcionário</option></select></label><span>Última alteração: {currentPage?.updated_at?new Date(currentPage.updated_at).toLocaleString("pt-BR"):"Ainda não salvo"}</span></div><form onSubmit={savePage}><label className="admin-json-label">Conteúdo em JSON</label><textarea className="admin-json-editor" spellCheck="false" value={pageJson} onChange={e=>setPageJson(e.target.value)} rows={18}/><div className="admin-editor-actions"><button type="submit" disabled={busyId==="cms"}><Save size={15}/> Salvar rascunho</button><button type="button" className="publish" disabled={busyId==="cms-publish"} onClick={()=>publishPage(true)}><CheckCircle2 size={15}/> Publicar</button><button type="button" className="unpublish" onClick={()=>publishPage(false)}><Eye size={15}/> Retirar publicação</button></div></form></section>}
     {tab==="audit"&&<section className="admin-data-panel"><div className="admin-panel-heading"><div><h2>Histórico de auditoria</h2><p>Eventos de criação, alteração e exclusão registrados automaticamente.</p></div><span>{audit.length} eventos</span></div>{audit.length===0?<div className="admin-empty">Ainda não existem eventos de auditoria registrados.</div>:<div className="admin-table-wrap"><table><thead><tr><th>Data e hora</th><th>Ator</th><th>Ação</th><th>Origem</th><th>Registro</th></tr></thead><tbody>{audit.map(a=><tr key={a.id}><td>{new Date(a.created_at).toLocaleString("pt-BR")}</td><td>{a.actor_user_id||"Sistema"}</td><td><span className="admin-state">{a.action}</span></td><td>{a.table_name}</td><td>{a.record_id||"—"}</td></tr>)}</tbody></table></div>}</section>}
     </>}
+    {reportDetail&&<div className="es-report-overlay" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)setReportDetail(null);}}><section className="es-report-modal" role="dialog" aria-modal="true" aria-label="Detalhes do registro"><header><div><span>DETALHES DO REGISTRO</span><h2>{reportDetail.name}</h2></div><button onClick={()=>setReportDetail(null)} aria-label="Fechar">×</button></header><div className="es-report-json">{Object.entries(reportDetail.details||{}).map(([key,value])=><div key={key}><span>{key}</span><strong>{typeof value==="object"&&value!==null?JSON.stringify(value,null,2):String(value??"—")}</strong></div>)}</div><footer><button onClick={()=>setReportDetail(null)}>Fechar detalhes</button></footer></section></div>}
     <footer className="admin-workspace-footer">Empresa Segura ENAT · Acesso administrativo autorizado · Auditoria operacional ativa</footer>
     </main>
   </div>;
