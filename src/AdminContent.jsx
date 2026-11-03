@@ -1,12 +1,13 @@
 import React from "react";
 import { useEffect, useState } from "react";
-import { ArrowLeft, ShieldCheck, LockKeyhole, Building2, Users, FileText, BookOpenCheck, Settings, Activity, KeyRound, CircleHelp, LogOut, RefreshCw, CheckCircle2, XCircle, Clock3, Save, Eye, AlertTriangle } from "lucide-react";
+import { ArrowLeft, ShieldCheck, LockKeyhole, Building2, Users, FileText, BookOpenCheck, Settings, Activity, KeyRound, CircleHelp, LogOut, RefreshCw, CheckCircle2, XCircle, Clock3, Save, Eye, AlertTriangle, CalendarCheck, Printer } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 
 const url=import.meta.env.VITE_SUPABASE_URL;
 const key=import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 const client=url&&key?createClient(url,key):null;
-const tabs=[["companies","Empresas",Building2],["people","Funcionários",Users],["reports","Relatórios",FileText],["content","Conteúdo",BookOpenCheck],["audit","Auditoria",Activity]];
+const apiBase=import.meta.env.VITE_EMPRESA_SEGURA_API_URL||"https://empresa-segura-enat-api.onrender.com";
+const tabs=[["companies","Empresas",Building2],["people","Funcionários",Users],["events","Participantes ENAT",CalendarCheck],["reports","Relatórios",FileText],["content","Conteúdo",BookOpenCheck],["audit","Auditoria",Activity]];
 
 export function AdminContent({onBack}) {
   const [email,setEmail]=useState("");
@@ -31,6 +32,8 @@ export function AdminContent({onBack}) {
   const [reportPeriod,setReportPeriod]=useState("todos");
   const [reportSearch,setReportSearch]=useState("");
   const [reportDetail,setReportDetail]=useState(null);
+  const [eventParticipants,setEventParticipants]=useState([]);
+  const [eventSearch,setEventSearch]=useState("");
 
   async function verifyAndLoad(s) {
     if(!client||!s?.user)return;
@@ -41,8 +44,27 @@ export function AdminContent({onBack}) {
       if(!ap){setAdmin(null);setError("Esta conta não possui perfil administrativo ENAT ativo. Solicite a habilitação a um administrador autorizado.");return;}
       setAdmin(ap);
       await loadData();
+      await loadEventParticipants(s);
     }catch(e){setError(e.message||"Falha ao validar o perfil administrativo.");}
     finally{setLoading(false);}
+  }
+  async function loadEventParticipants(currentSession=session){
+    if(!currentSession?.access_token){setEventParticipants([]);return;}
+    const response=await fetch(apiBase+"/api/admin/event-participants",{headers:{Authorization:"Bearer "+currentSession.access_token}});
+    const data=await response.json();
+    if(!response.ok)throw new Error(data.error||"Não foi possível carregar inscrições em eventos ENAT.");
+    setEventParticipants(Array.isArray(data.participants)?data.participants:[]);
+  }
+  async function reviewEventParticipant(participant,status){
+    setBusyId(participant.id);setError("");setNotice("");
+    try{
+      const response=await fetch(apiBase+"/api/admin/event-participants/"+encodeURIComponent(participant.id)+"/status",{method:"PATCH",headers:{"Content-Type":"application/json",Authorization:"Bearer "+session.access_token},body:JSON.stringify({status})});
+      const data=await response.json();
+      if(!response.ok)throw new Error(data.error||"Não foi possível atualizar a inscrição.");
+      setNotice(status==="attended"?"Presença confirmada. Relatório individual liberado para o participante.":status==="approved"?"Inscrição aprovada.":"Inscrição rejeitada.");
+      await loadEventParticipants(session);
+    }catch(e){setError(e.message||"Falha ao atualizar inscrição.");}
+    finally{setBusyId("");}
   }
   async function loadData(){
     if(!client)return;
@@ -111,6 +133,15 @@ export function AdminContent({onBack}) {
     <div className="admin-metrics"><article><span>Empresas cadastradas</span><strong>{companies.length}</strong><small>{pendingCompanies} aguardando análise</small></article><article><span>Contas individuais</span><strong>{profiles.length}</strong><small>{pendingMembers} vínculos pendentes</small></article><article><span>Páginas publicadas</span><strong>{pages.filter(p=>p.published).length}</strong><small>Conteúdo do portal</small></article><article><span>Eventos de auditoria</span><strong>{audit.length}</strong><small>Últimos 200 eventos</small></article></div>
     {tab==="companies"&&<section className="admin-data-panel"><div className="admin-panel-heading"><div><h2>Solicitações de empresas</h2><p>Confira os dados e aprove ou rejeite o cadastro institucional.</p></div><span>{companies.length} registros</span></div>{companies.length===0?<div className="admin-empty">Nenhuma solicitação de empresa encontrada.</div>:<div className="admin-table-wrap"><table><thead><tr><th>Empresa</th><th>CNPJ</th><th>Contato</th><th>Status</th><th>Recebida em</th><th>Ações</th></tr></thead><tbody>{companies.map(c=><tr key={c.id}><td><strong>{c.trade_name||c.legal_name}</strong><small>{c.legal_name}</small></td><td>{c.cnpj}</td><td>{c.contact_email}<small>{c.phone||"Telefone não informado"}</small></td><td><span className={"admin-state "+c.status}>{c.status}</span></td><td>{new Date(c.created_at).toLocaleDateString("pt-BR")}</td><td>{c.status==="pending"?<div className="admin-row-actions"><button disabled={busyId===c.id} onClick={()=>reviewCompany(c,true)}><CheckCircle2 size={14}/> Aprovar</button><button className="reject" disabled={busyId===c.id} onClick={()=>reviewCompany(c,false)}><XCircle size={14}/> Rejeitar</button></div>:<span className="admin-muted">{c.review_note||"Analisada"}</span>}</td></tr>)}</tbody></table></div>}</section>}
     {tab==="people"&&<><section className="admin-data-panel"><div className="admin-panel-heading"><div><h2>Solicitações de vínculo</h2><p>Aprove o vínculo de funcionários à empresa participante.</p></div><span>{memberships.length} vínculos</span></div>{memberships.length===0?<div className="admin-empty">Nenhum vínculo encontrado.</div>:<div className="admin-table-wrap"><table><thead><tr><th>Conta</th><th>Empresa</th><th>Setor / cargo</th><th>Status</th><th>Ações</th></tr></thead><tbody>{memberships.map(m=><tr key={m.id}><td>{profiles.find(p=>p.user_id===m.user_id)?.full_name||m.user_id.slice(0,8)}</td><td>{m.empresa_segura_companies?.trade_name||m.empresa_segura_companies?.legal_name||m.company_id}</td><td>{m.department||"—"} / {m.job_title||"—"}</td><td><span className={"admin-state "+m.status}>{m.status}</span></td><td>{m.status==="pending"?<div className="admin-row-actions"><button disabled={busyId===m.id} onClick={()=>reviewMember(m,true)}><CheckCircle2 size={14}/> Aprovar</button><button className="reject" disabled={busyId===m.id} onClick={()=>reviewMember(m,false)}><XCircle size={14}/> Rejeitar</button></div>:<span className="admin-muted">—</span>}</td></tr>)}</tbody></table></div>}</section><section className="admin-data-panel"><div className="admin-panel-heading"><div><h2>Contas cadastradas</h2><p>Perfis, situação e data de criação.</p></div></div><div className="admin-table-wrap"><table><thead><tr><th>Nome</th><th>Perfil</th><th>Status</th><th>Criado em</th></tr></thead><tbody>{profiles.map(p=><tr key={p.user_id}><td>{p.full_name||p.user_id.slice(0,8)}</td><td>{p.role}</td><td><span className={"admin-state "+p.status}>{p.status}</span></td><td>{new Date(p.created_at).toLocaleDateString("pt-BR")}</td></tr>)}</tbody></table></div></section></>}
+    {tab==="events"&&<section className="admin-data-panel">
+      <div className="admin-panel-heading"><div><h2>Participantes individuais de eventos ENAT</h2><p>Inscrições de pessoas sem necessidade de vínculo empresarial. O relatório curricular só é liberado após confirmação de presença.</p></div><span>{eventParticipants.length} inscrições</span></div>
+      <div className="es-report-filters"><label className="es-report-search"><span>Pesquisar participante/evento</span><div><Search size={15}/><input value={eventSearch} onChange={e=>setEventSearch(e.target.value)} placeholder="Nome, e-mail, cidade ou evento…"/></div></label><label><span>Situação</span><select value={reportStatus} onChange={e=>setReportStatus(e.target.value)}><option value="todas">Todas</option><option value="pending">Em análise</option><option value="approved">Aprovadas</option><option value="rejected">Rejeitadas</option><option value="attended">Presença confirmada</option></select></label><div><button className="admin-refresh" onClick={()=>loadEventParticipants(session)}><RefreshCw size={14}/> Atualizar</button></div></div>
+      <div className="admin-table-wrap"><table><thead><tr><th>Participante</th><th>Evento</th><th>Cidade</th><th>Situação profissional</th><th>Status</th><th>Relatório</th><th>Ações</th></tr></thead><tbody>
+      {eventParticipants.filter(p=>{const q=eventSearch.trim().toLowerCase();return (!q||[p.full_name,p.email,p.city,p.event_name].some(v=>String(v||"").toLowerCase().includes(q)))&&(reportStatus==="todas"||p.status===reportStatus);}).map(p=><tr key={p.id}><td><strong>{p.full_name}</strong><small>{p.email||"—"}{p.phone?" · "+p.phone:""}</small></td><td>{p.event_name}</td><td>{p.city}</td><td>{({unemployed:"Desempregado(a)",employed:"Empregado(a)",student:"Estudante",self_employed:"Autônomo(a)",other:"Outro"})[p.employment_status]||"—"}</td><td><span className={"admin-state "+p.status}>{({pending:"Em análise",approved:"Aprovado",rejected:"Rejeitado",attended:"Presença confirmada"})[p.status]||p.status}</span></td><td>{p.report_issued_at&&p.report_code?<><strong>Disponível</strong><small>{p.report_code}</small></>:"Aguardando presença"}</td><td><div className="admin-row-actions">{p.status==="pending"&&<><button disabled={busyId===p.id} onClick={()=>reviewEventParticipant(p,"approved")}><CheckCircle2 size={13}/> Aprovar</button><button className="reject" disabled={busyId===p.id} onClick={()=>reviewEventParticipant(p,"rejected")}><XCircle size={13}/> Rejeitar</button></>}{p.status==="approved"&&<button disabled={busyId===p.id} onClick={()=>reviewEventParticipant(p,"attended")}><CalendarCheck size={13}/> Confirmar presença</button>}{p.status==="attended"&&<span className="admin-muted">Relatório liberado</span>}{p.status==="rejected"&&<span className="admin-muted">Encerrado</span>}</div></td></tr>)}
+      {eventParticipants.filter(p=>{const q=eventSearch.trim().toLowerCase();return (!q||[p.full_name,p.email,p.city,p.event_name].some(v=>String(v||"").toLowerCase().includes(q)))&&(reportStatus==="todas"||p.status===reportStatus);}).length===0&&<tr><td colSpan="7"><div className="admin-empty">Nenhuma inscrição encontrada para os filtros selecionados.</div></td></tr>}
+      </tbody></table></div>
+      <p className="es-report-privacy"><ShieldCheck size={15}/> Confirme presença somente após validação pela organização. O documento emitido é um relatório de participação, não um diploma ou certificado profissional.</p>
+    </section>}
     {tab==="reports"&&(()=>{
       const now=Date.now();
       const cutoff=reportPeriod==="30"?now-30*86400000:reportPeriod==="90"?now-90*86400000:reportPeriod==="365"?now-365*86400000:0;
